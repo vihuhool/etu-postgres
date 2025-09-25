@@ -1,72 +1,87 @@
 ---
-# Variable configuration.
-- name: Include OS-specific variables (Debian).
-  include_vars: "{{ ansible_distribution }}-{{ ansible_distribution_version.split('.')[0] }}.yml"
+- name: Include OS-specific variables (Debian)
+  ansible.builtin.include_vars:
+    file: "{{ ansible_distribution }}-{{ ansible_distribution_version.split('.')[0] }}.yml"
   when: ansible_os_family == 'Debian'
 
-- name: Include OS-specific variables (RedHat).
-  include_vars: "{{ ansible_os_family }}-{{ ansible_distribution_version.split('.')[0] }}.yml"
+- name: Include OS-specific variables (RedHat)
+  ansible.builtin.include_vars:
+    file: "{{ ansible_os_family }}-{{ ansible_distribution_version.split('.')[0] }}.yml"
   when:
     - ansible_os_family == 'RedHat'
     - ansible_distribution != 'Fedora'
     - ansible_distribution != 'Amazon'
 
-- name: Include OS-specific variables (Amazon).
-  include_vars: "{{ ansible_distribution }}-{{ ansible_distribution_major_version }}.yml"
+- name: Include OS-specific variables (Amazon)
+  ansible.builtin.include_vars:
+    file: "{{ ansible_distribution }}-{{ ansible_distribution_major_version }}.yml"
   when: ansible_distribution == 'Amazon'
 
-- name: Include OS-specific variables (Fedora).
-  include_vars: "{{ ansible_distribution }}-{{ ansible_distribution_version.split('.')[0] }}.yml"
+- name: Include OS-specific variables (Fedora)
+  ansible.builtin.include_vars:
+    file: "{{ ansible_distribution }}-{{ ansible_distribution_version.split('.')[0] }}.yml"
   when: ansible_distribution == 'Fedora'
 
-- name: Define postgresql_packages.
-  set_fact:
+- name: Define postgresql_packages
+  ansible.builtin.set_fact:
     postgresql_packages: "{{ __postgresql_packages | list }}"
   when: postgresql_packages is not defined
 
-- name: Define postgresql_version.
-  set_fact:
+- name: Define postgresql_version
+  ansible.builtin.set_fact:
     postgresql_version: "{{ __postgresql_version }}"
-  when: postgresql_version is not defined
+  when: postgresql_version is not defined and __postgresql_version is defined
 
-- name: Define postgresql_daemon.
-  set_fact:
+- name: Define postgresql_daemon
+  ansible.builtin.set_fact:
     postgresql_daemon: "{{ __postgresql_daemon }}"
-  when: postgresql_daemon is not defined
+  when: postgresql_daemon is not defined and __postgresql_daemon is defined
 
-- name: Define postgresql_data_dir.
-  set_fact:
+- name: Define postgresql_data_dir
+  ansible.builtin.set_fact:
     postgresql_data_dir: "{{ __postgresql_data_dir }}"
-  when: postgresql_data_dir is not defined
+  when: postgresql_data_dir is not defined and __postgresql_data_dir is defined
 
-- name: Define postgresql_bin_path.
-  set_fact:
+- name: Define postgresql_bin_path
+  ansible.builtin.set_fact:
     postgresql_bin_path: "{{ __postgresql_bin_path }}"
-  when: postgresql_bin_path is not defined
+  when: postgresql_bin_path is not defined and __postgresql_bin_path is defined
 
-- name: Define postgresql_config_path.
-  set_fact:
+- name: Define postgresql_config_path
+  ansible.builtin.set_fact:
     postgresql_config_path: "{{ __postgresql_config_path }}"
-  when: postgresql_config_path is not defined
+  when: postgresql_config_path is not defined and __postgresql_config_path is defined
 
-- name: Define postgresql_unix_socket_directories_mode.
-  set_fact:
-    postgresql_unix_socket_directories_mode: >-
-      {{ __postgresql_unix_socket_directories_mode | default('02775') }}
+- name: Define postgresql_unix_socket_directories_mode
+  ansible.builtin.set_fact:
+    postgresql_unix_socket_directories_mode: "{{ __postgresql_unix_socket_directories_mode | default('02775') }}"
   when: postgresql_unix_socket_directories_mode is not defined
 
-- name: Define postgresql_log_dir.
-  set_fact:
-    # postgresql_global_config_options is an array but its keys are unique, so it can be converted to dict,
-    # to easily get the value under the 'log_directory' key
-    postgresql_log_dir: "{{ (postgresql_global_config_options | items2dict(key_name='option', value_name='value')).log_directory }}"
+- name: Build global config options dict
+  ansible.builtin.set_fact:
+    pg_global_opts_dict: "{{ (postgresql_global_config_options | default([])) | items2dict(key_name='option', value_name='value') }}"
 
-- name: Define postgresql_effective_log_dir, if postgresql_log_dir is absolute
-  set_fact:
-    postgresql_effective_log_dir: '{{ postgresql_log_dir }}'
+- name: Define postgresql_log_dir (safe)
+  ansible.builtin.set_fact:
+    postgresql_log_dir: >-
+      {{
+        (__postgresql_conf_defaults.log_directory)
+        if (__postgresql_conf_defaults is defined
+            and __postgresql_conf_defaults.log_directory is defined)
+        else (
+          pg_global_opts_dict.log_directory
+          if (pg_global_opts_dict is defined
+              and pg_global_opts_dict.log_directory is defined)
+          else 'log'
+        )
+      }}
+
+- name: Define postgresql_effective_log_dir if absolute
+  ansible.builtin.set_fact:
+    postgresql_effective_log_dir: "{{ postgresql_log_dir }}"
   when: postgresql_log_dir is match("/")
 
-- name: Define postgresql_effective_log_dir, if postgresql_log_dir is relative
-  set_fact:
-    postgresql_effective_log_dir: '{{ postgresql_data_dir }}/{{ postgresql_log_dir }}'
+- name: Define postgresql_effective_log_dir if relative
+  ansible.builtin.set_fact:
+    postgresql_effective_log_dir: "{{ postgresql_data_dir }}/{{ postgresql_log_dir }}"
   when: postgresql_log_dir is not match("/")
